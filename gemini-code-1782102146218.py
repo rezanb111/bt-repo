@@ -1,0 +1,1271 @@
+import asyncio
+import logging
+import random
+import string
+import sqlite3
+from datetime import datetime, timedelta
+import aiohttp
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+logger = logging.getLogger("IranCloud")
+
+# ═══════════════════════════════════════════════
+#  CONFIG
+# ═══════════════════════════════════════════════
+BOT_TOKEN   = "8980393631:AAHIOvRc-MsDU8HHDxiybfOTUuPsONyFOac"
+ADMIN_ID    = 6779342889
+CHANNEL_ID  = "@iranclod"
+CHANNEL_URL = "https://t.me/iranclod"
+
+WELCOME_IMAGE = "https://raw.githubusercontent.com/rezanb111/test-server/refs/heads/main/NoteGPT_Image_20260606175452.png"
+WALLET_IMAGE  = "https://i.ibb.co/T9TgbhG/Gemini-Generated-Image-sy0bx6sy0bx6sy0b.png"
+ACCOUNT_IMAGE = "https://github.com/rezanb111/test-server/raw/refs/heads/main/NoteGPT_Image_20260606180638.png"
+SUPPORT_IMAGE = "https://github.com/rezanb111/test-server/raw/refs/heads/main/NoteGPT_Image_20260606181857.png"
+
+# ═══════════════════════════════════════════════
+#  PREMIUM EMOJI IDs
+# ═══════════════════════════════════════════════
+E = {
+    "de":      "5911096835887337583",
+    "ru":      "5913274246867456342",
+    "us":      "5913463998522592692",
+    "am":      "5913272455866093666",
+    "tr":      "5910995113881901195",
+    "fi":      "5911041344909873378",
+    "fr":      "5913605586414473124",
+    "gb":      "5913443365499703513",
+    "be":      "5913529642802745141",
+    "ca":      "5913623736946265914",
+    "dk":      "5911206009661034712",
+    "kr":      "5913371673905598425",
+    "br":      "5911148568768418614",
+    "it":      "5913688444923547525",
+    "green":   "6084384451154941172",
+    "shop":    "6077678113125306912",
+    "desktop": "5929314699882532260",
+    "laptop":  "5931509565609741639",
+    "gear":    "5929098607192969118",
+    "inf":     "5927241068197187139",
+    "up":      "5933533882480594340",
+    "mobile":  "5958293913675501329",
+    "check":   "6113832658196762761",
+    "link":    "6113813004426416777",
+    "check2":  "6291694847426303062",
+    "red":     "6114054033696101648",
+}
+
+# ═══════════════════════════════════════════════
+#  PLANS
+# ═══════════════════════════════════════════════
+PLANS = [
+    {
+        "id": 1, "name": "پکیج پایه — ۴ گیگابایت", "gb": 4, "days": 30, "price": 2, "style": "primary", "emoji_id": E["green"],
+        "locations": ["de", "fi", "fr", "gb", "us", "ca", "it", "be", "dk", "kr", "br", "ru", "am", "tr"],
+        "desc": "حجم: ۴ گیگابایت در ماه\nمدت زمان اعتبار: ۳۰ روز\nلوکیشن‌ها: اتصال هوشمند به بیش از ۲۰ لوکیشن برتر اروپایی، آمریکایی و آسیایی\nپروتکل‌ها: پروتکل‌های پیشرفته VMess و VLESS کاملاً پایدار\nدستگاه‌ها: امکان اتصال همزمان ۲ دستگاه بدون افت کیفیت\nهدیه ویژه: یک عدد پروکسی تلگرام اختصاصی بدون فیلتر و پرسرعت"
+    },
+    {
+        "id": 2, "name": "پکیج برنز — ۸ گیگابایت", "gb": 8, "days": 30, "price": 4, "style": "primary", "emoji_id": E["laptop"],
+        "locations": ["de", "fi", "fr", "gb", "us", "ca", "it", "be", "dk", "kr", "br", "ru", "am", "tr"],
+        "desc": "حجم: ۸ گیگابایت در ماه\nمدت زمان اعتبار: ۳۰ روز\nلوکیشن‌ها: دسترسی کامل به شبکه گسترده بیش از ۲۰ لوکیشن اختصاصی اختصاصی\nپروتکل‌ها: پشتیبانی از پروتکل‌های فوق سریع VMess + VLESS و Trojan\nدستگاه‌ها: قابلیت اتصال همزمان برای ۳ دستگاه فعال\nهدیه ویژه: یک عدد پروکسی تلگرام اختصاصی بدون فیلتر و پرسرعت"
+    },
+    {
+        "id": 3, "name": "پکیج نقره — ۱۲ گیگابایت", "gb": 12, "days": 30, "price": 6, "style": "primary", "emoji_id": E["desktop"],
+        "locations": ["de", "fi", "fr", "gb", "us", "ca", "it", "be", "dk", "kr", "br", "ru", "am", "tr"],
+        "desc": "حجم: ۱۲ گیگابایت در ماه\nمدت زمان اعتبار: ۳۰ روز\nلوکیشن‌ها: دسترسی به زیرساخت ابری در بیش از ۲۰ لوکیشن جهانی با پینگ بسیار پایین\nپروتکل‌ها: قابلیت اتصال از طریق سرویس‌های VMess + VLESS + Trojan و Reality\nدستگاه‌ها: امکان استفاده همزمان روی ۳ دستگاه به صورت پایدار\nهدیه ویژه: یک عدد پروکسی تلگرام اختصاصی بدون فیلتر و پرسرعت"
+    },
+    {
+        "id": 4, "name": "پکیج گلد — ۱۶ گیگابایت", "gb": 16, "days": 30, "price": 8, "style": "primary", "emoji_id": E["up"],
+        "locations": ["de", "fi", "fr", "gb", "us", "ca", "it", "be", "dk", "kr", "br", "ru", "am", "tr"],
+        "desc": "حجم: ۱۶ گیگابایت در ماه\nمدت زمان اعتبار: ۳۰ روز\nلوکیشن‌ها: توزیع‌شده در بیش از ۲۰ لوکیشن امن و ناشناس در سراسر دنیا\nپروتکل‌ها: بهینه‌سازی شده با پروتکل‌های قدرتمند رونمایی شده بازار ضد فیلتر\nدستگاه‌ها: سقف مجاز اتصال همزمان برای ۴ دستگاه مجزا\nهدیه ویژه: یک عدد پروکسی تلگرام اختصاصی بدون فیلتر و پرسرعت"
+    },
+    {
+        "id": 5, "name": "پکیج پلاتین — ۲۰ گیگابایت", "gb": 20, "days": 30, "price": 10, "style": "success", "emoji_id": E["inf"],
+        "locations": ["de", "fi", "fr", "gb", "us", "ca", "it", "be", "dk", "kr", "br", "ru", "am", "tr"],
+        "desc": "حجم: ۲۰ گیگابایت در ماه\nمدت زمان اعتبار: ۳۰ روز\nلوکیشن‌ها: دارای گره‌های ارتباطی در بیش از ۲۰ لوکیشن پریمیوم و بدون ترافیک\nپروتکل‌ها: مجهز به رمزنگاری پیشرفته نظامی جهت تضمین امنیت اطلاعات شما\nدستگاه‌ها: امکان بهره‌برداری روی ۵ دستگاه متصل همزمان\nهدیه ویژه: یک عدد پروکسی تلگرام اختصاصی بدون فیلتر و پرسرعت"
+    },
+    {
+        "id": 6, "name": "پکیج الماس — ۲۴ گیگابایت", "gb": 24, "days": 30, "price": 12, "style": "success", "emoji_id": E["inf"],
+        "locations": ["de", "fi", "fr", "gb", "us", "ca", "it", "be", "dk", "kr", "br", "ru", "am", "tr"],
+        "desc": "حجم: ۲۴ گیگابایت در ماه\nمدت زمان اعتبار: ۳۰ روز\nلوکیشن‌ها: پوشش سرتاسری و اتصال فوق‌سریع به بیش از ۲۰ لوکیشن معتبر جهانی\nپروتکل‌ها: سازگاری کامل با سیستم‌عامل‌های مختلف تحت آخرین پروتکل‌های روز\nدستگاه‌ها: سقف پهنای باند باز برای اتصال همزمان ۵ دستگاه\nهدیه ویژه: یک عدد پروکسی تلگرام اختصاصی بدون فیلتر و پرسرعت"
+    },
+    {
+        "id": 7, "name": "پکیج پلاس — ۲۸ گیگابایت", "gb": 28, "days": 30, "price": 14, "style": "success", "emoji_id": E["inf"],
+        "locations": ["de", "fi", "fr", "gb", "us", "ca", "it", "be", "dk", "kr", "br", "ru", "am", "tr"],
+        "desc": "حجم: ۲۸ گیگابایت در ماه\nمدت زمان اعتبار: ۳۰ روز\nلوکیشن‌ها: مسیریابی هوشمند ترافیک از میان بیش از ۲۰ لوکیشن بین‌المللی اختصاصی\nپروتکل‌ها: آی‌پی ثابت و اختصاصی بدون قطعی بر بستر امن‌ترین تکنولوژی‌ها\nدستگاه‌ها: مجاز برای اتصال همزمان ۵ دستگاه کاربر\nهدیه ویژه: یک عدد پروکسی تلگرام اختصاصی بدون فیلتر و پرسرعت"
+    },
+    {
+        "id": 8, "name": "پکیج پرو — ۳۲ گیگابایت", "gb": 32, "days": 30, "price": 16, "style": "danger", "emoji_id": E["check"],
+        "locations": ["de", "fi", "fr", "gb", "us", "ca", "it", "be", "dk", "kr", "br", "ru", "am", "tr"],
+        "desc": "حجم: ۳۲ گیگابایت در ماه\nمدت زمان اعتبار: ۳۰ روز\nلوکیشن‌ها: پهنای باند گیگابیتی در بیش از ۲۰ لوکیشن دیتاسنتری مطرح\nپروتکل‌ها: مناسب وبگردی، استریم ویدیو با کیفیت بالا و گیمینگ بدون پکت لاس\nدستگاه‌ها: قابلیت اتصال بدون تداخل برای ۶ دستگاه همزمان\nهدیه ویژه: یک عدد پروکسی تلگرام اختصاصی بدون فیلتر و پرسرعت"
+    },
+    {
+        "id": 9, "name": "پکیج اولترا — ۳۶ گیگابایت", "gb": 36, "days": 30, "price": 18, "style": "danger", "emoji_id": E["gear"],
+        "locations": ["de", "fi", "fr", "gb", "us", "ca", "it", "be", "dk", "kr", "br", "ru", "am", "tr"],
+        "desc": "حجم: ۳۶ گیگابایت در ماه\nمدت زمان اعتبار: ۳۰ روز\nلوکیشن‌ها: شبکه توزیع اختصاصی با بیش از ۲۰ لوکیشن بی‌پایان و بهینه شده\nپروتکل‌ها: دور زدن کامل فیلترینگ شدید با فناوری نوین هدایت شبکه\nدستگاه‌ها: اشتراک گذاری آسان بین حداکثر ۷ دستگاه به طور همزمان\nهدیه ویژه: یک عدد پروکسی تلگرام اختصاصی بدون فیلتر و پرسرعت"
+    },
+    {
+        "id": 10, "name": "پکیج ماکسیمم — ۴۰ گیگابایت", "gb": 40, "days": 30, "price": 20, "style": "danger", "emoji_id": E["link"],
+        "locations": ["de", "fi", "fr", "gb", "us", "ca", "it", "be", "dk", "kr", "br", "ru", "am", "tr"],
+        "desc": "حجم: ۴۰ گیگابایت در ماه\nمدت زمان اعتبار: ۳۰ روز\nلوکیشن‌ها: بالاترین سطح دسترسی تجاری به بیش از ۲۰ لوکیشن لوکس و ویژه\nپروتکل‌ها: حداکثر مچ‌شدن سرعت دانلود و آپلود همراه با کانال‌های پرایویت\nدستگاه‌ها: اتصال بدون مرز برای ۸ دستگاه همزمان هم خانه یا شرکت\nهدیه ویژه: یک عدد پروکسی تلگرام اختصاصی بدون فیلتر و پرسرعت"
+    }
+]
+
+FLAG_EMOJIS = {
+    "de": ("آلمان 🇩🇪", E["de"]),
+    "ru": ("روسیه 🇷🇺", E["ru"]),
+    "us": ("آمریکا 🇺🇸", E["us"]),
+    "am": ("ارمنستان 🇦🇲", E["am"]),
+    "tr": ("ترکیه 🇹🇷", E["tr"]),
+    "fi": ("فنلاند 🇫🇮", E["fi"]),
+    "fr": ("فرانسه 🇫🇷", E["fr"]),
+    "gb": ("انگلیس 🇬🇧", E["gb"]),
+    "be": ("بلژیک 🇧🇪", E["be"]),
+    "ca": ("کانادا 🇨🇦", E["ca"]),
+    "dk": ("دانمارک 🇩🇰", E["dk"]),
+    "kr": ("کره جنوبی 🇰🇷", E["kr"]),
+    "br": ("برزیل 🇧🇷", E["br"]),
+    "it": ("ایتالیا 🇮🇹", E["it"]),
+}
+
+PAYMENT_SITES = [
+    ("پرداخت فا دات کام", "https://pardakhtfa.com"),
+    ("چنج فا", "https://changefa.com"),
+    ("ایرانیکارت", "https://iranicard.ir"),
+]
+
+# ═══════════════════════════════════════════════
+#  DATABASE
+# ═══════════════════════════════════════════════
+def init_db():
+    c = sqlite3.connect("irancloud.db")
+    c.executescript("""
+    CREATE TABLE IF NOT EXISTS users (
+        user_id INTEGER PRIMARY KEY, username TEXT, full_name TEXT,
+        balance REAL DEFAULT 0, joined_at TEXT, is_banned INTEGER DEFAULT 0,
+        captcha_done INTEGER DEFAULT 0, rules_accepted INTEGER DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
+        amount REAL, type TEXT, detail TEXT, created_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS orders (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
+        plan_id INTEGER, plan_name TEXT, price REAL,
+        status TEXT DEFAULT 'pending', config TEXT,
+        created_at TEXT, expires_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS support_tickets (
+        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
+        message TEXT, reply TEXT, status TEXT DEFAULT 'open', created_at TEXT
+    );
+    CREATE TABLE IF NOT EXISTS vouchers (
+        code TEXT PRIMARY KEY, amount REAL,
+        used INTEGER DEFAULT 0, used_by INTEGER
+    );
+    CREATE TABLE IF NOT EXISTS pending_vouchers (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER, code TEXT, amount REAL,
+        status TEXT DEFAULT 'pending', created_at TEXT
+    );
+    """)
+    c.commit()
+    c.close()
+
+def db():
+    return sqlite3.connect("irancloud.db")
+
+def get_user(uid):
+    with db() as c:
+        return c.execute("SELECT * FROM users WHERE user_id=?", (uid,)).fetchone()
+
+def create_user(uid, uname, fname):
+    with db() as c:
+        c.execute("INSERT OR IGNORE INTO users (user_id,username,full_name,joined_at) VALUES (?,?,?,?)",
+                  (uid, uname, fname, datetime.now().isoformat()))
+
+def get_balance(uid):
+    with db() as c:
+        r = c.execute("SELECT balance FROM users WHERE user_id=?", (uid,)).fetchone()
+        return r[0] if r else 0.0
+
+def update_balance(uid, delta):
+    with db() as c:
+        c.execute("UPDATE users SET balance=balance+? WHERE user_id=?", (delta, uid))
+
+def log_tx(uid, amount, t, detail):
+    with db() as c:
+        c.execute("INSERT INTO transactions (user_id,amount,type,detail,created_at) VALUES (?,?,?,?,?)",
+                  (uid, amount, t, detail, datetime.now().isoformat()))
+
+def get_all_users():
+    with db() as c:
+        return [r[0] for r in c.execute("SELECT user_id FROM users WHERE is_banned=0").fetchall()]
+
+def get_stats():
+    with db() as c:
+        total   = c.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+        banned  = c.execute("SELECT COUNT(*) FROM users WHERE is_banned=1").fetchone()[0]
+        active  = c.execute("SELECT COUNT(*) FROM orders WHERE status='active'").fetchone()[0]
+        revenue = c.execute("SELECT SUM(amount) FROM transactions WHERE type='charge'").fetchone()[0] or 0
+        pending_v = c.execute("SELECT COUNT(*) FROM pending_vouchers WHERE status='pending'").fetchone()[0]
+    return total, banned, active, revenue, pending_v
+
+def add_pending_voucher(uid, code, amount):
+    with db() as c:
+        c.execute("INSERT INTO pending_vouchers (user_id,code,amount,created_at) VALUES (?,?,?,?)",
+                  (uid, code, amount, datetime.now().isoformat()))
+        return c.lastrowid
+
+def get_pending_voucher(vid):
+    with db() as c:
+        return c.execute("SELECT * FROM pending_vouchers WHERE id=?", (vid,)).fetchone()
+
+def approve_voucher(vid):
+    row = get_pending_voucher(vid)
+    if not row or row[4] != "pending":
+        return False, "تراکنش یافت نشد یا قبلاً پردازش شده."
+    with db() as c:
+        c.execute("UPDATE pending_vouchers SET status='approved' WHERE id=?", (vid,))
+    update_balance(row[1], row[3])
+    log_tx(row[1], row[3], "charge", f"trx_hash:{row[2]}")
+    return True, row
+
+def reject_voucher(vid):
+    row = get_pending_voucher(vid)
+    if not row:
+        return False
+    with db() as c:
+        c.execute("UPDATE pending_vouchers SET status='rejected' WHERE id=?", (vid,))
+    return row
+
+def ban_user(uid, ban=True):
+    with db() as c:
+        c.execute("UPDATE users SET is_banned=? WHERE user_id=?", (1 if ban else 0, uid))
+
+def set_captcha(uid):
+    with db() as c:
+        c.execute("UPDATE users SET captcha_done=1 WHERE user_id=?", (uid,))
+
+def set_rules(uid):
+    with db() as c:
+        c.execute("UPDATE users SET rules_accepted=1 WHERE user_id=?", (uid,))
+
+def create_order(uid, plan):
+    expires = (datetime.now() + timedelta(days=plan["days"])).isoformat()
+    config = "vmess://eyJob3N0IjoiaXJhbmNsb3VkLm5ldCIsInBvcnQiOjQ0MywicHMiOiJJcmFuQ2xvdWQifQ=="
+    with db() as c:
+        c.execute("INSERT INTO orders (user_id,plan_id,plan_name,price,status,config,created_at,expires_at) VALUES (?,?,?,?,?,?,?,?)",
+                  (uid, plan["id"], plan["name"], plan["price"], "active", config,
+                   datetime.now().isoformat(), expires))
+
+def get_plan(pid):
+    return next((p for p in PLANS if p["id"] == pid), None)
+
+def add_voucher_db(code, amount):
+    with db() as c:
+        c.execute("INSERT OR IGNORE INTO vouchers (code,amount) VALUES (?,?)", (code, amount))
+
+# ═══════════════════════════════════════════════
+#  RAW API IMPLEMENTATION WITH FIXES
+# ═══════════════════════════════════════════════
+init_db()
+
+captcha_store = {}
+pending_action = {}
+broadcast_state = {}
+
+async def api(method: str, **params):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/{method}"
+    async with aiohttp.ClientSession() as s:
+        async with s.post(url, json=params) as r:
+            return await r.json()
+
+def btn(text, *, cb=None, url=None, style=None, eid=None):
+    d = {"text": text}
+    if cb:    d["callback_data"] = cb
+    if url:   d["url"] = url
+    if style: d["style"] = style
+    if eid:   d["icon_custom_emoji_id"] = eid
+    return d
+
+def mk(*rows):
+    return {"inline_keyboard": list(rows)}
+
+async def send(cid, text, markup=None, pm="HTML"):
+    p = dict(chat_id=cid, text=text, parse_mode=pm)
+    if markup: p["reply_markup"] = markup
+    return await api("sendMessage", **p)
+
+async def send_photo(cid, photo, caption, markup=None, pm="HTML"):
+    p = dict(chat_id=cid, photo=photo, caption=caption, parse_mode=pm)
+    if markup: p["reply_markup"] = markup
+    return await api("sendPhoto", **p)
+
+async def edit_caption(cid, mid, caption, markup=None, pm="HTML"):
+    p = dict(chat_id=cid, message_id=mid, caption=caption, parse_mode=pm)
+    if markup: p["reply_markup"] = markup
+    return await api("editMessageCaption", **p)
+
+async def edit_media(cid, mid, photo, caption, markup=None, pm="HTML"):
+    p = dict(
+        chat_id=cid, message_id=mid,
+        media={"type": "photo", "media": photo, "caption": caption, "parse_mode": pm}
+    )
+    if markup: p["reply_markup"] = markup
+    return await api("editMessageMedia", **p)
+
+async def answer_cb(cid, text="", alert=False):
+    await api("answerCallbackQuery", callback_query_id=cid, text=text, show_alert=alert)
+
+# ═══════════════════════════════════════════════
+#  KEYBOARDS
+# ═══════════════════════════════════════════════
+def kb_main(is_admin=False):
+    rows = [
+        [
+            btn("🛒  خرید پنل VPN",        cb="buy_menu",  style="success", eid=E["shop"]),
+            btn("👛  کیف پول",              cb="wallet",    style="primary", eid=E["green"]),
+        ],
+        [
+            btn("👤  حساب کاربری",          cb="account",   style="primary", eid=E["desktop"]),
+            btn("🎫  پشتیبانی آنلاین",     cb="support",   style="primary", eid=E["link"]),
+        ],
+        [
+            btn("📖  راهنمای اتصال",        cb="guide",     style="primary", eid=E["mobile"]),
+            btn("❓  سوالات متداول",        cb="faq",       style="primary"),
+        ],
+        [
+            btn("📋  قوانین سرویس",         cb="rules_view"),
+            btn("📡  کانال ما",             url=CHANNEL_URL, eid=E["check2"]),
+        ],
+    ]
+    if is_admin:
+        rows.append([btn("⚙️  پنل مدیریت", cb="admin_panel", style="danger", eid=E["gear"])])
+    return mk(*rows)
+
+def kb_buy():
+    rows = []
+    for p in PLANS:
+        gb_text = "♾ نامحدود" if p["gb"] == -1 else f"{p['gb']} گیگ"
+        rows.append([btn(
+            f"{gb_text}  ·  {p['name']}  ·  {p['price']} TRX",
+            cb=f"plan_{p['id']}", style=p["style"], eid=p.get("emoji_id")
+        )])
+    rows.append([btn("🔙  بازگشت", cb="main")])
+    return mk(*rows)
+
+def kb_plan(pid, has_balance):
+    rows = [
+        [btn("✅  خرید با کیف پول",    cb=f"buy_{pid}", style="success", eid=E["check"])],
+        [btn("💳  شارژ کیف پول اول",  cb="charge_wallet", style="primary", eid=E["green"])],
+        [btn("🔙  بازگشت به پکیج‌ها", cb="buy_menu")],
+    ]
+    if not has_balance:
+        rows[0][0] = btn("❌  موجودی کافی نیست — ابتدا شارژ کنید", cb="charge_wallet", style="danger", eid=E["red"])
+    return mk(*rows)
+
+def kb_wallet():
+    return mk(
+        [btn("💳  شارژ کیف پول",     cb="charge_wallet", style="success", eid=E["green"])],
+        [btn("📜  تاریخچه تراکنش‌ها", cb="tx_history",    style="primary")],
+        [btn("🔙  بازگشت",            cb="main")],
+    )
+
+def kb_charge():
+    rows = []
+    for name, url_ in PAYMENT_SITES:
+        rows.append([btn(f"🌐  خرید ترون (TRX) از {name}", url=url_, style="primary", eid=E["link"])])
+    rows.append([btn("✅  ترون واریز کردم — ارسال هش تراکنش", cb="enter_voucher", style="success", eid=E["check"])])
+    rows.append([btn("🔙  بازگشت",                     cb="wallet")])
+    return mk(*rows)
+
+def kb_support():
+    return mk(
+        [btn("✉️  ارسال پیام جدید",    cb="send_support", style="primary", eid=E["link"])],
+        [btn("🔙  بازگشت",             cb="main")],
+    )
+
+def kb_admin():
+    return mk(
+        [btn("📊  آمار کامل",           cb="adm_stats",        style="primary", eid=E["up"])],
+        [btn("📢  پیام همگانی",         cb="adm_broadcast",    style="primary", eid=E["mobile"])],
+        [btn("👤  جستجو کاربر",         cb="adm_search",       style="primary", eid=E["desktop"])],
+        [btn("💰  افزایش موجودی",       cb="adm_add_bal",      style="success", eid=E["green"]),
+         btn("💸  کاهش موجودی",        cb="adm_dec_bal",      style="danger",  eid=E["red"])],
+        [btn("🚫  بلاک کاربر",         cb="adm_ban",          style="danger",  eid=E["red"]),
+         btn("✅  آنبلاک کاربر",       cb="adm_unban",        style="success", eid=E["check"])],
+        [btn("🎟️  ساخت ووچر",         cb="adm_make_voucher", style="success", eid=E["shop"])],
+        [btn("📋  تیکت‌های پشتیبانی",  cb="adm_tickets",      style="primary", eid=E["link"])],
+        [btn("💎  ووچرهای در انتظار",  cb="adm_vouchers",     style="danger",  eid=E["up"])],
+        [btn("🔙  بازگشت",             cb="main")],
+    )
+
+def kb_captcha(answer, uid):
+    nums = [answer] + random.sample([i for i in range(2, 30) if i != answer], 3)
+    random.shuffle(nums)
+    row = [btn(str(n), cb=f"cap_{n}_{uid}",
+               style="success" if n == answer else "danger") for n in nums]
+    return mk(row)
+
+def kb_join():
+    return mk(
+        [btn("📡  عضویت در کانال رسمی IranCloud", url=CHANNEL_URL, style="primary", eid=E["check2"])],
+        [btn("✅  عضو شدم — ورود به ربات",        cb="check_join",  style="success", eid=E["check"])],
+    )
+
+def kb_rules():
+    return mk(
+        [btn("✅  قوانین را خواندم و می‌پذیرم", cb="accept_rules", style="success", eid=E["check"])],
+    )
+
+# ═══════════════════════════════════════════════
+#  HELPERS
+# ═══════════════════════════════════════════════
+async def check_channel(uid):
+    try:
+        res = await api("getChatMember", chat_id=CHANNEL_ID, user_id=uid)
+        if res.get("ok"):
+            return res["result"]["status"] in ("member", "administrator", "creator")
+        return False
+    except:
+        return False
+
+async def send_captcha(uid):
+    a, b = random.randint(2, 9), random.randint(2, 9)
+    captcha_store[uid] = a * b
+    text = (
+        "🔐 <b>تأیید امنیتی IranCloud</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "برای ورود به ربات، پاسخ سؤال ریاضی زیر را انتخاب کنید.\n"
+        "این مرحله برای جلوگیری از ربات‌های مخرب است.\n\n"
+        f"❓  <b>{a} × {b} = ?</b>\n\n"
+        "یکی از گزینه‌های زیر را انتخاب کنید:"
+    )
+    await send(uid, text, kb_captcha(a * b, uid))
+
+async def send_rules_msg(uid):
+    text = (
+        "📋 <b>قوانین و شرایط استفاده از IranCloud VPN</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        "لطفاً قبل از استفاده از سرویس، قوانین زیر را با دقت بخوانید:\n\n"
+        "1️⃣ <b>یک حساب، یک کاربر</b>\n"
+        "هر حساب کاربری صرفاً برای استفاده شخصی یک نفر مجاز است. "
+        "اشتراک‌گذاری اکانت با دیگران ممنوع است.\n\n"
+        "2️⃣ <b>ممنوعیت فروش مجدد کانفیگ</b>\n"
+        "فروش یا واگذاری کانفیگ‌های خریداری‌شده به دیگران ممنوع است "
+        "و منجر به تعلیق دائمی حساب می‌شود.\n\n"
+        "3️⃣ <b>استفاده قانونی</b>\n"
+        "استفاده از سرویس برای هرگونه فعالیت غیرقانونی، "
+        "حملات سایبری، اسپم یا آسیب به دیگران ممنوع است.\n\n"
+        "4️⃣ <b>سیاست استرداد</b>\n"
+        "پس از فعال‌سازی سرویس و ارسال کانفیگ، "
+        "امکان استرداد وجه وجود ندارد. "
+        "در صورت بروز مشکل فنی از طرف ما، جبران خواهد شد.\n\n"
+        "5️⃣ <b>قطعی‌های موقت</b>\n"
+        "در مواردی نادر مانند بروزرسانی سرور یا مشکلات شبکه اینترنت، "
+        "ممکن است سرویس موقتاً قطع شود. "
+        "این موارد به زمان اشتراک اضافه خواهد شد.\n\n"
+        "6️⃣ <b>پشتیبانی</b>\n"
+        "تیم پشتیبانی ما ۷ روز هفته پاسخگوی سؤالات شما است.\n\n"
+        "با کلیک روی دکمه زیر، قوانین را می‌پذیرید:"
+    )
+    await send(uid, text, kb_rules())
+
+async def send_main(uid, fname=""):
+    is_admin = (uid == ADMIN_ID)
+    bal = get_balance(uid)
+    with db() as c:
+        active = c.execute("SELECT COUNT(*) FROM orders WHERE user_id=? AND status='active'", (uid,)).fetchone()[0]
+    text = (
+        f"🌐 <b>IranCloud VPN — پنل رسمی</b>\n"
+        "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        f"👋 سلام <b>{fname}</b> عزیز!\n\n"
+        "به پیشرفته‌ترین سرویس VPN ایران خوش آمدید.\n"
+        "ما بهترین سرورها را با بالاترین کیفیت ارائه می‌دهیم.\n\n"
+        "📊 <b>وضعیت سرویس‌های IranCloud:</b>\n"
+        f"• وضعیت سرورها: 🟢 آنلاین و پایدار\n"
+        f"• میانگین پینگ: ۱۲ms\n"
+        f"• آپتایم ماهانه: ۹۹.۹٪\n\n"
+        f"💼 <b>اطلاعات حساب شما:</b>\n"
+        f"• موجودی کیف پول: <code>{bal:.2f} TRX</code>\n"
+        f"• اشتراک‌های فعال: {active} عدد\n\n"
+        "از منوی زیر گزینه موردنظر را انتخاب کنید:"
+    )
+    await send_photo(uid, WELCOME_IMAGE, text, kb_main(is_admin))
+
+# ═══════════════════════════════════════════════
+#  POLLING UPDATE HANDLER
+# ═══════════════════════════════════════════════
+async def process_updates(offset=0):
+    while True:
+        try:
+            res = await api("getUpdates", offset=offset, timeout=20)
+            if not res.get("ok"):
+                await asyncio.sleep(1)
+                continue
+            for upd in res["result"]:
+                offset = upd["update_id"] + 1
+                
+                # CALLBACK HANDLERS
+                if "callback_query" in upd:
+                    call = upd["callback_query"]
+                    await handle_callback(call)
+                    continue
+                
+                # MESSAGE HANDLERS
+                if "message" in upd:
+                    msg = upd["message"]
+                    if "text" not in msg:
+                        continue
+                    
+                    uid = msg["from"]["id"]
+                    text = msg["text"]
+                    fname = msg["from"].get("first_name", "") + " " + msg["from"].get("last_name", "")
+                    uname = msg["from"].get("username", "")
+                    
+                    create_user(uid, uname, fname)
+                    u = get_user(uid)
+                    if u and u[5]:
+                        await send(uid, "🚫 حساب شما توسط مدیریت مسدود شده است.\nبرای اطلاعات بیشتر با پشتیبانی تماس بگیرید.")
+                        continue
+                    
+                    if text == "/start":
+                        if not u[6]:
+                            await send_captcha(uid)
+                            continue
+                        if not u[7]:
+                            await send_rules_msg(uid)
+                            continue
+                        if not await check_channel(uid):
+                            await send_photo(uid, WELCOME_IMAGE,
+                                "👋 <b>خوش آمدید به IranCloud VPN</b>\n\n"
+                                "برای استفاده از ربات، ابتدا باید در کانال رسمی ما عضو شوید.\n"
+                                "پس از عضویت روی دکمه <b>عضو شدم</b> کلیک کنید:",
+                                kb_join())
+                            continue
+                        await send_main(uid, fname)
+                        continue
+                    
+                    # PROCESS ACTIONS (FIXED PERSISTENT ROUTING)
+                    action = pending_action.get(uid)
+                    
+                    if action == "voucher":
+                        code = text.strip()
+                        if len(code) < 10:
+                            await send(uid, "❌ فرمت هش تراکنش ارسالی نامعتبر است. لطفاً کد هش صحیح ۶۴ کاراکتری را مجدداً بررسی و ارسال کنید:")
+                            continue
+                        if uid in pending_action:
+                            del pending_action[uid]
+                        amount = random.randint(5, 40)
+                        vid = add_pending_voucher(uid, code, amount)
+                        await send(uid, "✅ <b>تراکنش در حال بررسی است</b>\n\nتراکنش شما دریافت شد و بزودی پس از تایید بلاکچین به موجودی شما اضافه میشود. لطفاً شکیبا باشید.")
+                        try:
+                            await send(ADMIN_ID,
+                                f"💎 <b>درخواست شارژ ترون جدید!</b>\n\n"
+                                f"• کاربر: {fname} (<code>{uid}</code>)\n"
+                                f"• هش تراکنش ارسالی: <code>{code}</code>\n"
+                                f"• شناسه سیستم: {vid}",
+                                mk([
+                                    btn("✅ تأیید خودکار و آنی", cb=f"v_app_{vid}", style="success"),
+                                    btn("❌ رد درخواست", cb=f"v_rej_{vid}", style="danger")
+                                ]))
+                        except: pass
+                        continue
+
+                    if action == "ticket":
+                        if len(text) < 5:
+                            await send(uid, "❌ متن پیام خیلی کوتاه است. لطفاً بیشتر توضیح دهید:")
+                            continue
+                        if uid in pending_action:
+                            del pending_action[uid]
+                        with db() as c:
+                            c.execute("INSERT INTO support_tickets (user_id,message,created_at) VALUES (?,?,?)",
+                                      (uid, text, datetime.now().isoformat()))
+                            tid = c.lastrowid
+                        await send(uid, f"✅ تیکت شما با شماره <b>#{tid}</b> ثبت شد. به زودی پشتیبان پاسخ شما را خواهد داد.")
+                        try:
+                            await send(ADMIN_ID,
+                                f"🎫 <b>تیکت پشتیبانی جدید! #{tid}</b>\n"
+                                f"• کاربر: {fname} | <code>{uid}</code>\n"
+                                f"• متن پیام: {text}",
+                                mk([btn("✍️ پاسخ فوری", cb=f"ticket_reply_{tid}_{uid}", style="success")]))
+                        except: pass
+                        continue
+
+                    # ADMIN ACTIONS INTERCEPTION
+                    if uid == ADMIN_ID:
+                        if action == "broadcast":
+                            if uid in pending_action:
+                                del pending_action[uid]
+                            users = get_all_users()
+                            await send(ADMIN_ID, f"🚀 فرآیند ارسال پیام همگانی برای {len(users)} کاربر آغاز شد...")
+                            success = 0
+                            for us_id in users:
+                                try:
+                                    await send(us_id, text)
+                                    success += 1
+                                    await asyncio.sleep(0.05)
+                                except: pass
+                            await send(ADMIN_ID, f"✅ ارسال پیام همگانی به پایان رسید.\n📊 موفق: {success} از {len(users)}")
+                            continue
+
+                        if action == "search_user":
+                            if uid in pending_action:
+                                del pending_action[uid]
+                            try: tuid = int(text)
+                            except: await send(ADMIN_ID, "❌ خطا در فرمت شناسه"); continue
+                            user = get_user(tuid)
+                            if not user:
+                                await send(ADMIN_ID, "❌ کاربر در دیتابیس یافت نشد.")
+                                continue
+                            bal = get_balance(tuid)
+                            await send(ADMIN_ID, f"👤 کاربر یافت شد:\n\nنام: {user[2]}\nیوزرنیم: @{user[1]}\nموجودی: {bal} TRX",
+                                       mk([btn("🔍 مشاهده پروفایل مدیریتی", cb=f"adm_view_{tuid}")]))
+                            continue
+
+                        if action == "add_balance_id":
+                            try: tuid = int(text)
+                            except: await send(ADMIN_ID, "❌ خطا"); continue
+                            pending_action[uid] = f"add_balance_amount_{tuid}"
+                            await send(ADMIN_ID, f"💰 مقدار شارژ (ترون) برای کاربر {tuid} را وارد کنید:")
+                            continue
+
+                        if action and action.startswith("add_balance_amount_"):
+                            tuid = int(action.split("_")[3])
+                            if uid in pending_action:
+                                del pending_action[uid]
+                            try: amt = float(text)
+                            except: await send(ADMIN_ID, "❌ خطا در فرمت مبلغ"); continue
+                            update_balance(tuid, amt)
+                            log_tx(tuid, amt, "admin_gift", "شارژ توسط مدیریت")
+                            await send(ADMIN_ID, f"✅ مبلغ {amt} TRX به حساب {tuid} اضافه شد.")
+                            try: await send(tuid, f"🎁 <b>کیف پول شما شارژ شد!</b>\n\nمبلغ <b>{amt} TRX</b> توسط مدیریت به حساب شما واریز گردید.\n💰 موجودی جدید: {get_balance(tuid):.2f} TRX")
+                            except: pass
+                            continue
+
+                        if action == "dec_balance_id":
+                            try: tuid = int(text)
+                            except: await send(ADMIN_ID, "❌ خطا"); continue
+                            pending_action[uid] = f"dec_balance_amount_{tuid}"
+                            await send(ADMIN_ID, f"💸 مقدار کاهش (ترون) برای کاربر {tuid} را وارد کنید:")
+                            continue
+
+                        if action and action.startswith("dec_balance_amount_"):
+                            tuid = int(action.split("_")[3])
+                            if uid in pending_action:
+                                del pending_action[uid]
+                            try: amt = float(text)
+                            except: await send(ADMIN_ID, "❌ خطا در فرمت مبلغ"); continue
+                            update_balance(tuid, -amt)
+                            log_tx(tuid, -amt, "admin_deduct", "کاهش توسط مدیریت")
+                            await send(ADMIN_ID, f"✅ مبلغ {amt} TRX از حساب {tuid} کسر شد.")
+                            continue
+
+                        if action == "ban_id":
+                            if uid in pending_action:
+                                del pending_action[uid]
+                            try: tuid = int(text)
+                            except: await send(ADMIN_ID, "❌ خطا"); continue
+                            ban_user(tuid, True)
+                            await send(ADMIN_ID, f"🚫 کاربر {tuid} با موفقیت مسدود شد.")
+                            continue
+
+                        if action == "unban_id":
+                            if uid in pending_action:
+                                del pending_action[uid]
+                            try: tuid = int(text)
+                            except: await send(ADMIN_ID, "❌ خطا"); continue
+                            ban_user(tuid, False)
+                            await send(ADMIN_ID, f"✅ کاربر {tuid} آنبلاک شد.")
+                            continue
+
+                        if action == "make_voucher_amount":
+                            if uid in pending_action:
+                                del pending_action[uid]
+                            try: amt = float(text)
+                            except: await send(ADMIN_ID, "❌ خطا"); continue
+                            code = "UV-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=16))
+                            add_voucher_db(code, amt)
+                            await send(ADMIN_ID, f"🎟️ <b>ووچر با موفقیت ساخته شد!</b>\n\nکد ووچر:\n<code>{code}</code>\nمبلغ: {amt} TRX")
+                            continue
+
+                        if action == "reply_ticket_id":
+                            try: tid = int(text)
+                            except: await send(ADMIN_ID, "❌ خطا"); continue
+                            with db() as c:
+                                tk = c.execute("SELECT user_id,message FROM support_tickets WHERE id=?", (tid,)).fetchone()
+                            if not tk:
+                                await send(ADMIN_ID, "❌ تیکت یافت نشد."); continue
+                            pending_action[uid] = f"ticket_reply_{tid}_{tk[0]}"
+                            await send(ADMIN_ID, f"✍️ پاسخ خود به تیکت #{tid} (کاربر {tk[0]}) را بفرستید:\n\nپیام کاربر: {tk[1]}")
+                            continue
+
+                        if action and action.startswith("adm_pm_"):
+                            tuid = int(action.split("_")[2])
+                            if uid in pending_action:
+                                del pending_action[uid]
+                            try:
+                                await send(tuid, f"📨 <b>پاسخ پشتیبانی IranCloud:</b>\n\n{text}",
+                                    mk([btn("🎫 پشتیبانی", cb="support", style="primary", eid=E["link"])]))
+                                await send(ADMIN_ID, "✅ پاسخ ارسال شد")
+                            except: await send(ADMIN_ID, "❌ ارسال ناموفق")
+                            continue
+
+                        if action and action.startswith("ticket_reply_"):
+                            parts = action.split("_")
+                            tid, tuid = parts[2], parts[3]
+                            if uid in pending_action:
+                                del pending_action[uid]
+                            with db() as c:
+                                c.execute("UPDATE support_tickets SET reply=?,status='closed' WHERE id=?", (text, tid))
+                            try:
+                                await send(int(tuid),
+                                    f"📨 <b>پاسخ به تیکت #{tid}:</b>\n\n{text}",
+                                    mk([btn("🎫 پشتیبانی", cb="support", style="primary", eid=E["link"])]))
+                                await send(ADMIN_ID, "✅ پاسخ ارسال شد")
+                            except: await send(ADMIN_ID, "❌ ارسال ناموفق")
+                            continue
+
+                    if u and u[6] and u[7]:
+                        await send_main(uid, fname)
+
+        except Exception as e:
+            logger.error(f"Error parsing polling event cycle: {e}")
+            await asyncio.sleep(1)
+
+# ═══════════════════════════════════════════════
+#  CALLBACK INLINE QUERY ROUTER
+# ═══════════════════════════════════════════════
+async def handle_callback(call):
+    data = call["data"]
+    uid = call["from"]["id"]
+    mid = call["message"]["message_id"]
+    cid = call["message"]["chat"]["id"]
+    call_id = call["id"]
+    fname = call["from"].get("first_name", "")
+    
+    if data.startswith("cap_"):
+        parts   = data.split("_")
+        chosen  = int(parts[1])
+        tuid    = int(parts[2])
+        correct = captcha_store.get(tuid)
+        if chosen == correct:
+            set_captcha(tuid)
+            await answer_cb(call_id, "✅ تأیید شد!")
+            await api("deleteMessage", chat_id=cid, message_id=mid)
+            u = get_user(tuid)
+            if not u[7]:
+                await send_rules_msg(tuid)
+            else:
+                await send_main(tuid, fname)
+        else:
+            await answer_cb(call_id, "❌ پاسخ اشتباه است! دوباره تلاش کنید.", alert=True)
+            await api("deleteMessage", chat_id=cid, message_id=mid)
+            await send_captcha(tuid)
+        return
+
+    if data == "accept_rules":
+        set_rules(uid)
+        await answer_cb(call_id, "✅ قوانین پذیرفته شد")
+        await api("deleteMessage", chat_id=cid, message_id=mid)
+        if not await check_channel(uid):
+            await send_photo(uid, WELCOME_IMAGE,
+                "✅ قوانین پذیرفته شد.\n\nحالا لطفاً در کانال ما عضو شوید:",
+                kb_join())
+        else:
+            await send_main(uid, fname)
+        return
+
+    if data == "check_join":
+        if await check_channel(uid):
+            await answer_cb(call_id, "✅ عضویت تأیید شد!")
+            await api("deleteMessage", chat_id=cid, message_id=mid)
+            await send_main(uid, fname)
+        else:
+            await answer_cb(call_id, "❌ هنوز در کانال عضو نشده‌اید!", alert=True)
+        return
+
+    if data == "main":
+        await api("deleteMessage", chat_id=cid, message_id=mid)
+        await send_main(uid, fname)
+        return
+
+    if data == "buy_menu":
+        text = (
+            "🛒 <b>فروشگاه پکیج‌های IranCloud VPN</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "✅ <b>تمام پکیج‌ها شامل:</b>\n"
+            "• پروتکل‌های VMess، VLESS، Trojan و Reality\n"
+            "• اتصال همزمان هوشمند به بیش از ۲۰ لوکیشن جهانی\n"
+            "• پشتیبانی از اندروید، iOS، ویندوز و مک\n"
+            "• کانفیگ آماده — بلافاصله پس از خرید\n"
+            "• یک عدد پروکسی تلگرام اختصاصی هدیه روی تمام پلن‌ها\n\n"
+            "💡 <b>راهنمای انتخاب پکیج:</b>\n"
+            "• کاربری سبک (شبکه‌های اجتماعی): پکیج ۴ تا ۱۶ گیگ\n"
+            "• کاربری متوسط (یوتیوب و دانلود): پکیج ۲۰ تا ۳۲ گیگ\n"
+            "• کاربری سنگین و خانواده: پکیج ۳۶ تا ۴۰ گیگ\n\n"
+            "💰 <b>نرخ پکیج‌ها:</b> قیمت هر گیگ ترافیک نیم ترون (0.5 TRX) محاسبه شده است.\n\n"
+            "پکیج موردنظر را انتخاب کنید:"
+        )
+        res = await edit_caption(cid, mid, text, kb_buy())
+        if not res.get("ok"):
+            await send_photo(uid, WELCOME_IMAGE, text, kb_buy())
+        return
+
+    if data.startswith("plan_"):
+        plan_id = int(data.split("_")[1])
+        plan = get_plan(plan_id)
+        if not plan:
+            await answer_cb(call_id, "❌ پکیج یافت نشد"); return
+        bal = get_balance(uid)
+        enough = bal >= plan["price"]
+
+        loc_lines = ""
+        for lc in plan.get("locations", []):
+            if lc in FLAG_EMOJIS:
+                loc_lines += f"    • {FLAG_EMOJIS[lc][0]}\n"
+
+        gb_text = "♾ نامحدود" if plan["gb"] == -1 else f"{plan['gb']} گیگابایت"
+        text = (
+            f"📦 <b>جزئیات پکیج: {plan['name']}</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"📋 <b>مشخصات فنی پکیج:</b>\n"
+            f"{plan['desc']}\n\n"
+            f"🌍 <b>نمونه لوکیشن‌های فعال سرورها (بیش از ۲۰ لوکیشن):</b>\n{loc_lines}\n"
+            f"💰 <b>قیمت:</b> {plan['price']} TRX\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"👛 موجودی فعلی کیف پول شما: <code>{bal:.2f} TRX</code>\n"
+            f"{'✅ موجودی کافی است. می‌توانید خرید کنید.' if enough else '⚠️ موجودی ناکافی است. ابتدا کیف پول را شارژ کنید.'}\n\n"
+            f"💡 <b>نحوه خرید:</b>\n"
+            f"۱. کیف پول را با ارسال هش تراکنش ترون شارژ کنید\n"
+            f"۲. دکمه خرید را بزنید\n"
+            f"۳. کانفیگ آماده فوری ارسال می‌شود"
+        )
+        res = await edit_caption(cid, mid, text, kb_plan(plan_id, enough))
+        if not res.get("ok"):
+            await send_photo(uid, WELCOME_IMAGE, text, kb_plan(plan_id, enough))
+        return
+
+    if data.startswith("buy_"):
+        plan_id = int(data.split("_")[1])
+        plan = get_plan(plan_id)
+        bal = get_balance(uid)
+        if bal < plan["price"]:
+            await answer_cb(call_id, "❌ موجودی کافی نیست! ابتدا کیف پول را شارژ کنید.", alert=True)
+            return
+        update_balance(uid, -plan["price"])
+        log_tx(uid, -plan["price"], "purchase", plan["name"])
+        create_order(uid, plan)
+        config = "vmess://eyJob3N0IjoiaXJhbmNsb3VkLm5ldCIsInBvcnQiOjQ0MywicHMiOiJJcmFuQ2xvdWQifQ=="
+        try:
+            await send(ADMIN_ID,
+                f"🛒 <b>خرید جدید!</b>\n"
+                f"👤 {fname} | @{call['from'].get('username', '—')}\n"
+                f"🆔 <code>{uid}</code>\n"
+                f"📦 {plan['name']}\n"
+                f"💲 {plan['price']} TRX",
+                mk([btn("👤 مشاهده کاربر", cb=f"adm_view_{uid}", style="primary")]))
+        except: pass
+        text = (
+            f"🎉 <b>خرید موفق! — {plan['name']}</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"✅ اشتراک شما با موفقیت فعال شد!\n\n"
+            f"🔑 <b>کانفیگ اتصال شما:</b>\n"
+            f"<code>{config}</code>\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📱 <b>راهنمای اتصال — اندروید:</b>\n"
+            f"۱. اپ <b>V2RayNG</b> یا <b>Hiddify</b> را نصب کنید\n"
+            f"۲. کانفیگ بالا را کپی کنید\n"
+            f"۳. در اپ روی + بزنید → Import from Clipboard\n"
+            f"۴. روی کانفیگ ضربدر بزنید تا وصل شوید\n\n"
+            f"🍎 <b>راهنمای اتصال — iOS:</b>\n"
+            f"۱. اپ <b>Streisand</b> یا <b>V2Box</b> را نصب کنید\n"
+            f"۲. کانفیگ را کپی و import کنید\n\n"
+            f"💻 <b>راهنمای اتصال — ویندوز:</b>\n"
+            f"۱. برنامه <b>Hiddify</b> را دانلود کنید\n"
+            f"۲. کانفیگ را import کنید\n\n"
+            f"⏳ <b>انقضای اشتراک:</b> {plan['days']} روز دیگر\n"
+            f"💰 <b>موجودی باقی‌مانده:</b> <code>{get_balance(uid):.2f} TRX</code>\n\n"
+            f"❓ مشکلی داشتید؟ از بخش پشتیبانی کمک بگیرید."
+        )
+        await answer_cb(call_id, "✅ خرید موفق!")
+        await send_photo(uid, WELCOME_IMAGE, text, kb_main(uid == ADMIN_ID))
+        return
+
+    if data == "wallet":
+        bal = get_balance(uid)
+        with db() as c:
+            active = c.execute("SELECT COUNT(*) FROM orders WHERE user_id=? AND status='active'", (uid,)).fetchone()[0]
+            total  = c.execute("SELECT COUNT(*) FROM orders WHERE user_id=?", (uid,)).fetchone()[0]
+        text = (
+            f"👛 <b>کیف پول IranCloud</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"💰 <b>موجودی فعلی:</b> <code>{bal:.2f} TRX</code>\n"
+            f"📊 <b>خلاصه حساب:</b>\n"
+            f"• اشتراک‌های فعال: {active} عدد\n"
+            f"• کل خریدها: {total} عدد\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"💳 <b>شارژ کیف پول با واریز ترون (TRX):</b>\n\n"
+            f"شما می‌توانید بدون نیاز به احراز هویت، از صرافی‌های معتبر معرفی شده به صورت آنلاین ترون خریداری کرده و به آدرس اختصاصی ربات واریز نمایید.\n\n"
+            f"📌 <b>مبنای شارژ حساب بر اساس تایید تراکنش شما در شبکه بلاکچین ترون می‌باشد.</b>\n\n"
+            f"✅ <b>مزایای واریز ترون:</b>\n"
+            f"• بدون نیاز به احراز هویت پیچیده در سایت‌های واسط\n"
+            f"• خرید آنلاین و انتقال در کمتر از چند دقیقه\n"
+            f"• تأیید خودکار و آنی بلافاصله پس از بررسی صحیح تراکنش\n"
+            f"• کارمزد بسیار پایین شبکه و امنیت کامل غیرمتمرکز\n\n"
+            f"🔐 تمام تراکنش‌ها بر روی شبکه رسمی TRON ثبت و پیگیری می‌شوند."
+        )
+        res = await edit_media(cid, mid, WALLET_IMAGE, text, kb_wallet())
+        if not res.get("ok"):
+            await send_photo(uid, WALLET_IMAGE, text, kb_wallet())
+        return
+
+    if data == "charge_wallet":
+        text = (
+            "💳 <b>شارژ کیف پول از طریق واریز ترون (TRX)</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "💵 <b>مشخصات حساب واریز ترون:</b>\n"
+            "آدرس کیف پول ترون ربات (شبکه TRC20):\n"
+            "<code>TRTQTn8fxC3u9d7yQcqjK5nrNrWdVjnKTv</code>\n\n"
+            "📱 تصویر فوق نیز حاوی QR Code همین آدرس جهت اسکن آسان می‌باشد.\n\n"
+            "🛒 <b>مراحل خرید ترون بدون احراز هویت و شارژ حساب:</b>\n"
+            "۱. روی یکی از صرافی‌های معتبر زیر کلیک کنید.\n"
+            "۲. بدون نیاز به احراز هویت، مقدار ترون مورد نیاز خود را خریداری نمایید.\n"
+            "۳. ترون‌های خریداری شده را به آدرس ترون بالا واریز کنید.\n"
+            "۴. پس از اتمام انتقال، کد هش تراکنش (Trx Hash یا Transaction ID) را کپی کنید.\n"
+            "۵. بر روی دکمه زیر کلیک کرده و هش تراکنش را بفرستید تا حساب شما شارژ شود.\n\n"
+            "⬇️ صرافی خرید آنلاین ترون را انتخاب کنید:"
+        )
+        res = await edit_media(cid, mid, WALLET_IMAGE, text, kb_charge())
+        if not res.get("ok"):
+            await send_photo(uid, WALLET_IMAGE, text, kb_charge())
+        return
+
+    if data == "enter_voucher":
+        pending_action[uid] = "voucher"
+        await answer_cb(call_id)
+        await send(uid,
+            "🎟️ <b>ارسال هش تراکنش ترون</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "لطفاً کد هش تراکنش (Transaction Hash) ۶۴ کاراکتری مربوط به واریز ترون خود را با دقت ارسال نمایید.\n\n"
+            "📌 <b>مثال نمونه هش تراکنش:</b>\n"
+            "<code>a1b2c3d4e5f6...7g8h9i0j</code>\n\n"
+            "⚠️ پس از ارسال کد، وضعیت تراکنش در حال بررسی قرار گرفته و پس از تایید شبکه، تایید خودکار و آنی سیستم انجام می‌شود و حساب شما بلافاصله شارژ خواهد شد.\n\n"
+            "هش تراکنش را ارسال کنید:",
+            mk([btn("❌ لغو", cb="wallet", style="danger", eid=E["red"])]))
+        return
+
+    if data == "tx_history":
+        with db() as c:
+            rows = c.execute(
+                "SELECT amount,type,detail,created_at FROM transactions WHERE user_id=? ORDER BY id DESC LIMIT 10",
+                (uid,)).fetchall()
+        if not rows:
+            await answer_cb(call_id, "📜 تراکنشی یافت نشد", alert=True); return
+        text = (
+            "📜 <b>تاریخچه تراکنش‌های شما</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        )
+        for r in rows:
+            sign = "➕" if r[0] > 0 else "➖"
+            text += f"{sign} <b>{abs(r[0]):.2f} TRX</b> | {r[1]} | {r[2]}\n📅 {r[3][:16].replace('T',' ')}\n\n"
+        await send(uid, text, mk([btn("🔙 بازگشت", cb="wallet")]))
+        return
+
+    if data == "account":
+        u = get_user(uid)
+        bal = get_balance(uid)
+        with db() as c:
+            orders = c.execute("SELECT id,plan_name,expires_at,config FROM orders WHERE user_id=? AND status='active'", (uid,)).fetchall()
+        text = (
+            "👤 <b>حساب کاربری IranCloud VPN</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"• شناسه کاربری: <code>{uid}</code>\n"
+            f"• نام شما: {fname}\n"
+            f"• نام کاربری: @{call['from'].get('username', 'بدون یوزرنیم')}\n"
+            f"• تاریخ عضویت: {u[4][:10]}\n"
+            f"• موجودی حساب: <code>{bal:.2f} TRX</code>\n\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            "📦 <b>سرویس‌های فعال شما:</b>\n"
+        )
+        if not orders:
+            text += "❌ شما در حال حاضر هیچ سرویس فعالی ندارید.\nبرای خرید سرویس به بخش 'خرید پنل VPN' مراجعه کنید."
+        else:
+            for o in orders:
+                text += (
+                    f"🆔 <b>شناسه اشتراک: #{o[0]}</b>\n"
+                    f"📦 پکیج: {o[1]}\n"
+                    f"📅 تاریخ انقضا: {o[2][:10]}\n"
+                    f"🔑 کانفیگ:\n<code>{o[3]}</code>\n\n"
+                )
+        res = await edit_media(cid, mid, ACCOUNT_IMAGE, text, mk([btn("🔙 بازگشت", cb="main")]))
+        if not res.get("ok"):
+            await send_photo(uid, ACCOUNT_IMAGE, text, mk([btn("🔙 بازگشت", cb="main")]))
+        return
+
+    if data == "support":
+        text = (
+            "🎫 <b>پشتیبانی آنلاین IranCloud</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "تیم پشتیبانی ما آماده پاسخگویی به سؤالات و مشکلات شماست.\n\n"
+            "⏱️ <b>ساعات کاری:</b> ۷ روز هفته، ۲۴ ساعته\n"
+            "🚀 <b>زمان پاسخگویی:</b> معمولاً کمتر از ۱۵ دقیقه\n\n"
+            "💡 <b>قبل از ارسال تیکت، مطمئن شوید که:</b>\n"
+            "• راهنمای اتصال ربات را خوانده‌اید.\n"
+            "• نرم‌افزار اتصال شما به آخرین نسخه بروزرسانی شده است.\n"
+            "• مشکل خود را به صورت کامل و همراه با تصویر یا متن خطا بفرستید.\n\n"
+            "جهت ارسال پیام روی دکمه زیر کلیک کنید:"
+        )
+        res = await edit_media(cid, mid, SUPPORT_IMAGE, text, kb_support())
+        if not res.get("ok"):
+            await send_photo(uid, SUPPORT_IMAGE, text, kb_support())
+        return
+
+    if data == "send_support":
+        pending_action[uid] = "ticket"
+        await answer_cb(call_id)
+        await send(uid,
+            "✉️ <b>ارسال پیام به پشتیبانی</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "لطفاً متن پیام یا مشکل خود را به صورت کامل بنویسید و ارسال کنید.\n"
+            "می‌توانید اطلاعاتی مثل شناسه اشتراک یا نوع دستگاه خود را هم ذکر کنید.\n\n"
+            "پیام خود را بفرستید:",
+            mk([btn("❌ لغو", cb="support", style="danger", eid=E["red"])]))
+        return
+
+    if data == "guide":
+        text = (
+            "📖 <b>راهنمای کامل اتصال به IranCloud VPN</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "سرویس‌های ما از بهترین پروتکل‌های روز دنیا استفاده می‌کنند. برای اتصال ابتدا نرم‌افزار مربوط به دستگاه خود را دانلود کنید.\n\n"
+            "🤖 <b>اندروید (Android):</b>\n"
+            "۱. برنامه <b>v2rayNG</b> را از گوگل پلی دانلود کنید.\n"
+            "۲. کانفیگ دریافتی از ربات را کپی کنید.\n"
+            "۳. وارد برنامه شوید، منوی بالا سمت راست را باز کنید و گزینه <b>Import config from clipboard</b> را بزنید.\n"
+            "۴. روی کانفیگ اضافه شده کلیک کنید و دکمه دایره‌ای پایین را بزنید تا متصل شوید.\n\n"
+            "🍏 <b>آیفون و آیپد (iOS):</b>\n"
+            "۱. برنامه <b>Streisand</b> یا <b>V2Box</b> را از اپ استور دانلود کنید.\n"
+            "۲. کانفیگ را کپی کرده و در برنامه وارد کنید.\n\n"
+            "💻 <b>ویندوز (Windows):</b>\n"
+            "۱. برنامه <b>v2rayN</b> یا <b>Hiddify Next</b> را دانلود کنید.\n"
+            "۲. کانفیگ را اضافه کرده و دکمه اتصال را بزنید.\n\n"
+            "💡 <b>نکته مهم:</b> در صورت عدم اتصال، اینترنت گوشی را چند ثانیه روی حالت پرواز بگذارید و دوباره تلاش کنید."
+        )
+        await edit_caption(cid, mid, text, mk([btn("🔙 بازگشت", cb="main")]))
+        return
+
+    if data == "faq":
+        text = (
+            "❓ <b>سوالات متداول کاربران</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "❓ <b>سرعت دانلود چطور است؟</b>\n"
+            "🟢 تمام سرورها مجهز به پورت ۱۰ گیگابیت اختصاصی هستند و بالاترین سرعت ممکن شبکه شما را ارائه می‌دهند.\n\n"
+            "❓ <b>آیا روی اینترنت همراه اول و ایرانسل کار می‌کند؟</b>\n"
+            "🟢 بله، به دلیل استفاده از پروتکل Reality و تغییر مداوم ساختار، روی تمام اپراتورها (همراه اول، ایرانسل، رایتل، مخابرات و...) کاملاً پایدار است.\n\n"
+            "❓ <b>چند دستگاه همزمان می‌توانند متصل شوند؟</b>\n"
+            "🟢 بسته به پکیجی که خریداری می‌کنید بین ۲ تا ۸ دستگاه امکان اتصال همزمان وجود دارد.\n\n"
+            "❓ <b>آیا آی‌پی ثابت است؟</b>\n"
+            "🟢 بله، آی‌پی سرورها کاملاً ثابت بوده و برای کارهایی مثل ترید یا صرافی مناسب است."
+        )
+        await edit_caption(cid, mid, text, mk([btn("🔙 بازگشت", cb="main")]))
+        return
+
+    if data == "rules_view":
+        text = (
+            "📋 <b>قوانین سرویس دهی IranCloud</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+            "1️⃣ استفاده از اکانت برای اسپم، اتک و کارهای غیرقانونی ممنوع است.\n"
+            "2️⃣ اشتراک‌گذاری اکانت خارج از ظرفیت مشخص شده پکیج ممنوع است.\n"
+            "3️⃣ پس از تحویل کانفیگ به هیچ وجه عودت وجه نداریم.\n"
+            "4️⃣ پشتیبانی فقط برای مشکلات مربوط به سرورهای ماست، نه تنظیمات داخلی دستگاه شما.\n\n"
+            "استفاده از ربات به منزله پذیرش کامل این قوانین است."
+        )
+        await edit_caption(cid, mid, text, mk([btn("🔙 بازگشت", cb="main")]))
+        return
+
+    # ADMIN PANEL ROUTING INTERCEPTIONS
+    if uid == ADMIN_ID:
+        if data == "admin_panel":
+            text = (
+                "⚙️ <b>پنل مدیریت ربات IranCloud</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                "به بخش مدیریت خوش آمدید. از دکمه‌های زیر برای کنترل ربات استفاده کنید:"
+            )
+            await edit_caption(cid, mid, text, kb_admin())
+            return
+
+        if data == "adm_stats":
+            total, banned, active, revenue, pending_v = get_stats()
+            text = (
+                "📊 <b>آمار و ارقام ربات IranCloud</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"• کل کاربران ثبت شده: {total} نفر\n"
+                f"• کاربران مسدود شده: {banned} نفر\n"
+                f"• اشتراک‌های فعال سیستمی: {active} عدد\n"
+                f"• کل درآمدهای ثبت شده: {revenue:.2f} TRX\n"
+                f"• تراکنش‌های در انتظار تأیید ادمین: {pending_v} عدد\n"
+            )
+            await send(ADMIN_ID, text, mk([btn("🔙 بازگشت به پنل", cb="admin_panel")]))
+            return
+
+        if data == "adm_tickets":
+            with db() as c:
+                tickets = c.execute("SELECT id,user_id,message FROM support_tickets WHERE status='open' LIMIT 5").fetchall()
+            if not tickets:
+                await answer_cb(call_id, "✅ هیچ تیکت بازی وجود ندارد", alert=True); return
+            text = "📋 <b>تیکت‌های پشتیبانی باز:</b>\n\n"
+            for t in tickets:
+                text += f"🆔 <b>تیکت #{t[0]}</b> | کاربر: <code>{t[1]}</code>\n📝 متن: {t[2]}\n\n"
+            await send(ADMIN_ID, text, mk(
+                [btn("✍️ پاسخ به تیکت", cb="adm_reply_tk", style="primary")],
+                [btn("🔙 بازگشت", cb="admin_panel")]
+            ))
+            return
+
+        if data == "adm_reply_tk":
+            pending_action[ADMIN_ID] = "reply_ticket_id"
+            await send(ADMIN_ID, "📍 لطفاً شناسه تیکت (مثال: 5) را وارد کنید:")
+            return
+
+        if data == "adm_vouchers":
+            with db() as c:
+                rows = c.execute("SELECT id,user_id,code,amount FROM pending_vouchers WHERE status='pending' LIMIT 1").fetchall()
+            if not rows:
+                await answer_cb(call_id, "💎 هیچ تراکنشی در انتظار نیست", alert=True); return
+            r = rows[0]
+            text = (
+                "💎 <b>بررسی تراکنش ترون در انتظار</b>\n"
+                "━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"• شناسه سیستم: {r[0]}\n"
+                f"• کاربر: <code>{r[1]}</code>\n"
+                f"• هش تراکنش: <code>{r[2]}</code>\n"
+                f"• مبلغ فرضی سیستم جهت ویرایش/تایید: {r[3]} TRX\n"
+            )
+            await send(ADMIN_ID, text, mk([
+                btn("✅ تأیید خودکار و آنی", cb=f"v_app_{r[0]}", style="success"),
+                btn("❌ رد درخواست", cb=f"v_rej_{r[0]}", style="danger")
+            ], [btn("🔙 بازگشت", cb="admin_panel")]))
+            return
+
+        if data.startswith("v_app_"):
+            vid = int(data.split("_")[2])
+            ok, rdata = approve_voucher(vid)
+            if ok:
+                await answer_cb(call_id, "✅ تراکنش تایید و حساب شارژ شد")
+                await api("deleteMessage", chat_id=cid, message_id=mid)
+                try:
+                    await send(rdata[1], f"✅ <b>تأیید خودکار و آنی!</b>\n\nدرخواست شارژ شما با هش تراکنش <code>{rdata[2]}</code> تایید شد و مبلغ <b>{rdata[3]} TRX</b> به کیف پول شما اضافه گردید.")
+                except: pass
+            else:
+                await answer_cb(call_id, f"❌ خطا: {rdata}", alert=True)
+            return
+
+        if data.startswith("v_rej_"):
+            vid = int(data.split("_")[2])
+            rdata = reject_voucher(vid)
+            if rdata:
+                await answer_cb(call_id, "❌ تراکنش رد شد")
+                await api("deleteMessage", chat_id=cid, message_id=mid)
+                try:
+                    await send(rdata[1], f"❌ <b>درخواست شارژ رد شد</b>\n\nدرخواست شارژ شما با هش تراکنش <code>{rdata[2]}</code> رد شد. در صورت وجود مشکل به پشتیبانی پیام دهید.")
+                except: pass
+            return
+
+        if data == "adm_broadcast":
+            pending_action[ADMIN_ID] = "broadcast"
+            await send(ADMIN_ID, "📢 متن پیام همگانی خود را بفرستید (قالب HTML مجاز است):")
+            return
+
+        if data == "adm_search":
+            pending_action[ADMIN_ID] = "search_user"
+            await send(ADMIN_ID, "👤 شناسه عددی کاربر مورد نظر را بفرستید:")
+            return
+
+        if data == "adm_add_bal":
+            pending_action[ADMIN_ID] = "add_balance_id"
+            await send(ADMIN_ID, "💰 شناسه کاربر را بفرستید:")
+            return
+
+        if data == "adm_dec_bal":
+            pending_action[ADMIN_ID] = "dec_balance_id"
+            await send(ADMIN_ID, "💸 شناسه کاربر را بفرستید:")
+            return
+
+        if data == "adm_ban":
+            pending_action[ADMIN_ID] = "ban_id"
+            await send(ADMIN_ID, "🚫 شناسه کاربر جهت مسدودسازی را بفرستید:")
+            return
+
+        if data == "adm_unban":
+            pending_action[ADMIN_ID] = "unban_id"
+            await send(ADMIN_ID, "✅ شناسه کاربر جهت آنبلاک را بفرستید:")
+            return
+
+        if data == "adm_make_voucher":
+            pending_action[ADMIN_ID] = "make_voucher_amount"
+            await send(ADMIN_ID, "🎟️ مبلغ ووچر کدی را به ترون وارد کنید (مثال: 5.5):")
+            return
+
+        if data.startswith("adm_view_"):
+            tuid = int(data.split("_")[2])
+            u = get_user(tuid)
+            if not u:
+                await answer_cb(call_id, "کاربر یافت نشد", alert=True); return
+            bal = get_balance(tuid)
+            text = (
+                f"👤 <b>پروفایل مدیریتی کاربر:</b>\n\n"
+                f"• شناسه: <code>{u[0]}</code>\n"
+                f"• یوزرنیم: @{u[1] or '—'}\n"
+                f"• نام: {u[2]}\n"
+                f"• موجودی: {bal:.2f} TRX\n"
+                f"• وضعیت بلاک: {'🚫 مسدود' if u[5] else '✅ آزاد'}\n"
+            )
+            await send(ADMIN_ID, text, mk(
+                [btn("➕ افزایش موجودی", cb=f"adm_add_{tuid}"), btn("➖ کاهش موجودی", cb=f"adm_dec_{tuid}")],
+                [btn("🚫 بلاک", cb=f"adm_b_{tuid}"), btn("✅ آنبلاک", cb=f"adm_u_{tuid}")],
+                [btn("📩 ارسال پیام مستقیم", cb=f"adm_pm_{tuid}")]
+            ))
+            return
+
+        if data.startswith("adm_add_"):
+            tuid = int(data.split("_")[2])
+            pending_action[ADMIN_ID] = f"add_balance_amount_{tuid}"
+            await send(ADMIN_ID, f"💰 مقدار شارژ (ترون) برای کاربر {tuid} را وارد کنید:")
+            return
+
+        if data.startswith("adm_dec_"):
+            tuid = int(data.split("_")[2])
+            pending_action[ADMIN_ID] = f"dec_balance_amount_{tuid}"
+            await send(ADMIN_ID, f"💸 مقدار کاهش (ترون) برای کاربر {tuid} را وارد کنید:")
+            return
+
+        if data.startswith("adm_b_"):
+            tuid = int(data.split("_")[2])
+            ban_user(tuid, True)
+            await send(ADMIN_ID, f"🚫 کاربر {tuid} با موفقیت مسدود شد.")
+            return
+
+        if data.startswith("adm_u_"):
+            tuid = int(data.split("_")[2])
+            ban_user(tuid, False)
+            await send(ADMIN_ID, f"✅ کاربر {tuid} آنبلاک شد.")
+            return
+
+        if data.startswith("adm_pm_"):
+            tuid = int(data.split("_")[2])
+            pending_action[ADMIN_ID] = f"adm_pm_{tuid}"
+            await send(ADMIN_ID, f"📩 متن پیام مستقیم خود به کاربر {tuid} را وارد کنید:")
+            return
+
+        if data.startswith("ticket_reply_"):
+            parts = data.split("_")
+            tid, tuid = parts[2], parts[3]
+            pending_action[ADMIN_ID] = f"ticket_reply_{tid}_{tuid}"
+            await send(ADMIN_ID, f"✍️ پاسخ خود را برای تیکت #{tid} کاربر {tuid} بنویسید:")
+            return
+
+# ═══════════════════════════════════════════════
+#  RUN EXECUTIVE ASYNCIO ENVIRONMENT LOOP
+# ═══════════════════════════════════════════════
+if __name__ == "__main__":
+    asyncio.run(process_updates())
